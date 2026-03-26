@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useEffect, useRef } from 'react';
+import { useMemo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -21,6 +21,7 @@ import { ProcessingNode } from './ProcessingNode';
 import { TerminalNode } from './TerminalNode';
 import { PipelineEdge } from './PipelineEdge';
 import { NetworkLegend } from './NetworkLegend';
+import { InfraDetailPanel, type InfraSelection } from '@/components/layout/InfraDetailPanel';
 import { Loader2 } from 'lucide-react';
 
 const nodeTypes = {
@@ -39,6 +40,7 @@ const edgeTypes = {
 function NetworkGraphInner() {
   const selectedFieldNpdid = useScenarioStore((s) => s.selectedFieldNpdid);
   const { data: network, isLoading, error } = useNetwork(selectedFieldNpdid);
+  const [infraSelection, setInfraSelection] = useState<InfraSelection | null>(null);
   const { fitView } = useReactFlow();
   const prevFieldRef = useRef<number | null | undefined>(undefined);
 
@@ -100,14 +102,31 @@ function NetworkGraphInner() {
 
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
+      // Select field for subgraph view
       if (node.type === 'field' && node.data.npdid) {
         const npdid = node.data.npdid as number;
         useScenarioStore.getState().setSelectedField(
           npdid === selectedFieldNpdid ? null : npdid
         );
       }
+      // Show detail panel for any node
+      const nodeType = (node.type || 'facility') as InfraSelection['type'];
+      setInfraSelection({
+        type: nodeType,
+        data: node.data as Record<string, unknown>,
+      });
     },
     [selectedFieldNpdid]
+  );
+
+  const onEdgeClick = useCallback(
+    (_: React.MouseEvent, edge: Edge) => {
+      setInfraSelection({
+        type: 'pipeline',
+        data: (edge.data ?? {}) as Record<string, unknown>,
+      });
+    },
+    []
   );
 
   if (isLoading) {
@@ -159,6 +178,7 @@ function NetworkGraphInner() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
+        onEdgeClick={onEdgeClick}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
@@ -197,7 +217,12 @@ function NetworkGraphInner() {
       </ReactFlow>
 
       {/* Legend overlay */}
-      <NetworkLegend />
+      {!infraSelection && <NetworkLegend />}
+
+      <InfraDetailPanel
+        selection={infraSelection}
+        onClose={() => setInfraSelection(null)}
+      />
 
       {/* Selected field indicator */}
       {selectedFieldNpdid && (

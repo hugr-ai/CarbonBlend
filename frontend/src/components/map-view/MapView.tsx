@@ -15,6 +15,7 @@ import { useFields } from '@/hooks/useFields';
 import { getCO2Color } from '@/utils/co2Calculations';
 import { CO2Legend } from '@/components/co2-overlay/CO2Legend';
 import { CO2Tooltip } from '@/components/co2-overlay/CO2Tooltip';
+import { InfraDetailPanel, type InfraSelection } from '@/components/layout/InfraDetailPanel';
 import type { Field } from '@/types/field';
 
 // Inline dark map style
@@ -62,6 +63,7 @@ export function MapView() {
     zoom: 5,
   });
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
+  const [infraSelection, setInfraSelection] = useState<InfraSelection | null>(null);
 
   const selectedFieldNpdid = useScenarioStore((s) => s.selectedFieldNpdid);
   const setSelectedField = useScenarioStore((s) => s.setSelectedField);
@@ -181,12 +183,83 @@ export function MapView() {
   const onClick = useCallback(
     (event: MapLayerMouseEvent) => {
       const feature = event.features?.[0];
-      if (feature?.properties?.npdid) {
-        const npdid = feature.properties.npdid as number;
-        setSelectedField(npdid === selectedFieldNpdid ? null : npdid);
+      if (!feature) {
+        setInfraSelection(null);
+        return;
       }
+
+      const layerId = feature.layer?.id;
+      const props = feature.properties ?? {};
+
+      // Pipeline click
+      if (layerId === 'pipeline-lines') {
+        setInfraSelection({
+          type: 'pipeline',
+          data: {
+            name: props.name,
+            diameter_inches: props.diameter_inches,
+            medium: props.medium,
+            from_facility: props.from_facility,
+            to_facility: props.to_facility,
+            main_grouping: props.main_grouping,
+            operator: props.operator,
+          },
+        });
+        return;
+      }
+
+      // Field click
+      if (layerId === 'field-circles') {
+        const npdid = props.npdid as number;
+        setSelectedField(npdid === selectedFieldNpdid ? null : npdid);
+        // Find matching field for detail panel
+        const field = fields?.find((f: Field) => f.npdid_field === npdid);
+        if (field) {
+          setInfraSelection({
+            type: 'field',
+            data: {
+              name: field.name,
+              co2_mol_pct: field.co2_mol_pct,
+              status: field.status,
+              hc_type: field.hc_type,
+              operator: field.operator,
+              main_area: field.main_area,
+            },
+          });
+        }
+        return;
+      }
+
+      // Plant click
+      if (layerId === 'plant-circles') {
+        setInfraSelection({
+          type: 'processing_plant',
+          data: {
+            name: props.name,
+            capacity_mscm_d: props.capacity,
+            has_co2_removal: props.hasCO2Removal,
+          },
+        });
+        return;
+      }
+
+      // Terminal click
+      if (layerId === 'terminal-circles') {
+        setInfraSelection({
+          type: 'export_terminal',
+          data: {
+            name: props.name,
+            country: props.country,
+            hub_name: props.hub,
+            default_price: props.price,
+          },
+        });
+        return;
+      }
+
+      setInfraSelection(null);
     },
-    [selectedFieldNpdid, setSelectedField]
+    [selectedFieldNpdid, setSelectedField, fields]
   );
 
   return (
@@ -197,7 +270,7 @@ export function MapView() {
         onMouseMove={onHover}
         onClick={onClick}
         mapStyle={darkStyle}
-        interactiveLayerIds={['field-circles', 'facility-circles', 'plant-circles', 'terminal-circles']}
+        interactiveLayerIds={['field-circles', 'facility-circles', 'plant-circles', 'terminal-circles', 'pipeline-lines']}
         style={{ width: '100%', height: '100%' }}
       >
         <NavigationControl position="top-right" />
@@ -381,7 +454,7 @@ export function MapView() {
 
       <CO2Legend />
 
-      {hoverInfo && (
+      {hoverInfo && !infraSelection && (
         <CO2Tooltip
           x={hoverInfo.x}
           y={hoverInfo.y}
@@ -391,6 +464,11 @@ export function MapView() {
           type={hoverInfo.type}
         />
       )}
+
+      <InfraDetailPanel
+        selection={infraSelection}
+        onClose={() => setInfraSelection(null)}
+      />
     </div>
   );
 }
