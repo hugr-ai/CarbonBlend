@@ -14,36 +14,62 @@ interface TerminalNodeData {
 export const TerminalNode = memo(function TerminalNode({ data }: NodeProps) {
   const nodeData = data as TerminalNodeData;
   const country = (nodeData.country as string) ?? '';
-  const hub = nodeData.hub as string | undefined;
-  const price = nodeData.price as number | undefined;
-  const currency = (nodeData.currency as string) ?? 'USD';
+  const hub = (nodeData.hub ?? nodeData.hub_name) as string | undefined;
+  const price = (nodeData.price ?? nodeData.default_price) as number | undefined;
+  const currency = (nodeData.currency as string) ?? '';
   const flag = countryFlag(country);
 
+  // Build the info line: "hub | price currency"
+  const infoParts: string[] = [];
+  if (hub) infoParts.push(hub);
+  if (price != null) {
+    infoParts.push(`${price.toFixed(1)} ${currency || 'p/th'}`);
+  }
+  const infoLine = infoParts.join(' | ');
+
   return (
-    <>
-      <Handle type="target" position={Position.Left} className="!bg-teal !border-navy !w-2 !h-2" />
-      <div className="bg-navy-light border border-warning/40 rounded-lg px-3 py-2 min-w-[110px]">
+    <div className="relative">
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="!bg-teal-dark !border-navy !w-2 !h-2"
+      />
+
+      <div
+        style={{
+          width: 150,
+          minHeight: 46,
+          background: 'linear-gradient(180deg, #1a1a2e 0%, #0a1628 100%)',
+          border: '2px solid rgba(255, 169, 77, 0.45)',
+          borderRadius: 8,
+          padding: '8px 12px',
+          boxShadow: '0 2px 8px rgba(255, 169, 77, 0.1)',
+        }}
+      >
+        {/* Top row: flag + name */}
         <div className="flex items-center gap-2">
-          <span className="text-lg">{flag}</span>
-          <div className="flex flex-col">
-            <span className="text-xs font-semibold text-text-primary leading-tight">
-              {nodeData.label}
-            </span>
-            {hub && (
-              <span className="text-[10px] text-warning">{hub}</span>
-            )}
-          </div>
+          <span className="text-base leading-none">{flag}</span>
+          <span className="text-[11px] font-semibold text-text-primary leading-tight truncate">
+            {nodeData.label}
+          </span>
         </div>
-        {price != null && (
-          <div className="mt-1 text-[10px] text-text-secondary">
-            Price:{' '}
-            <span className="font-mono text-text-primary">
-              {price.toFixed(2)} {currency}/MWh
-            </span>
+
+        {/* Info line */}
+        {infoLine && (
+          <div
+            className="text-[10px] font-mono mt-1 truncate"
+            style={{ color: '#ffa94d' }}
+          >
+            {infoLine}
           </div>
         )}
       </div>
-      <Handle type="source" position={Position.Right} className="!bg-teal !border-navy !w-2 !h-2" />
-    </>
+
+      <Handle
+        type="source"
+        position={Position.Right}
+        className="!bg-teal-dark !border-navy !w-2 !h-2"
+      />
+    </div>
   );
 });

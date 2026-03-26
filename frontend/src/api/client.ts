@@ -55,6 +55,12 @@ export async function getPipelines(): Promise<Pipeline[]> {
   return data;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getPipelineGeoJSON(): Promise<any> {
+  const { data } = await api.get('/pipelines/geojson');
+  return data;
+}
+
 export async function getFacilities(): Promise<Facility[]> {
   const { data } = await api.get('/facilities');
   return data;
@@ -89,6 +95,7 @@ export interface NetworkData {
     id: string;
     source: string;
     target: string;
+    label?: string;
     data: Record<string, unknown>;
   }>;
 }

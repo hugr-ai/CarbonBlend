@@ -129,3 +129,51 @@ body {
 .animate-flow {
   animation: flow-dots 1s linear infinite;
 }
+
+/* Field node pulsing outer ring */
+@keyframes field-pulse {
+  0%, 100% {
+    opacity: 0.6;
+    transform: translateX(-50%) scale(1);
+  }
+  50% {
+    opacity: 0.2;
+    transform: translateX(-50%) scale(1.12);
+  }
+}
+
+.animate-field-pulse {
+  animation: field-pulse 2.5s ease-in-out infinite;
+}
+
+/* Pipeline flow animation - smoother */
+@keyframes flow-dots-smooth {
+  0% {
+    stroke-dashoffset: 24;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* React Flow node - remove default styling for custom nodes */
+.react-flow__node {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.react-flow__node.selected {
+  box-shadow: none !important;
+}
+
+/* Ensure handles are small and unobtrusive */
+.react-flow__handle {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.react-flow__node:hover .react-flow__handle {
+  opacity: 1;
+}

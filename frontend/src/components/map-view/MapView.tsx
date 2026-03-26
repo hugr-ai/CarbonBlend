@@ -9,7 +9,7 @@ import MapGL, {
 } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useQuery } from '@tanstack/react-query';
-import { getFacilities, getPipelines, getProcessingPlants, getExportTerminals } from '@/api/client';
+import { getFacilities, getPipelineGeoJSON, getProcessingPlants, getExportTerminals } from '@/api/client';
 import { useScenarioStore } from '@/stores/scenarioStore';
 import { useFields } from '@/hooks/useFields';
 import { getCO2Color } from '@/utils/co2Calculations';
@@ -68,6 +68,7 @@ export function MapView() {
 
   const { data: fields } = useFields();
   const { data: facilities } = useQuery({ queryKey: ['facilities'], queryFn: getFacilities, staleTime: 300000 });
+  const { data: pipelineGeoJSON } = useQuery({ queryKey: ['pipeline-geojson'], queryFn: getPipelineGeoJSON, staleTime: 300000 });
   const { data: plants } = useQuery({ queryKey: ['processing-plants'], queryFn: getProcessingPlants, staleTime: 300000 });
   const { data: terminals } = useQuery({ queryKey: ['export-terminals'], queryFn: getExportTerminals, staleTime: 300000 });
 
@@ -201,6 +202,51 @@ export function MapView() {
       >
         <NavigationControl position="top-right" />
         <ScaleControl position="bottom-right" />
+
+        {/* Pipeline lines */}
+        {pipelineGeoJSON && (
+          <Source id="pipelines" type="geojson" data={pipelineGeoJSON}>
+            <Layer
+              id="pipeline-lines"
+              type="line"
+              paint={{
+                'line-color': [
+                  'match',
+                  ['get', 'medium'],
+                  'Gas', '#00d4aa',
+                  'Rich Gas', '#00d4aa',
+                  'Dry Gas', '#00d4aa',
+                  'Oil', '#ffa94d',
+                  'Condensate', '#ff6b35',
+                  'rgba(184, 255, 225, 0.3)',
+                ],
+                'line-width': [
+                  'case',
+                  ['has', 'diameter_inches'],
+                  ['max', 1.5, ['min', ['/', ['get', 'diameter_inches'], 14], 5]],
+                  1.5,
+                ],
+                'line-opacity': 0.7,
+              }}
+            />
+            <Layer
+              id="pipeline-labels"
+              type="symbol"
+              layout={{
+                'text-field': ['get', 'name'],
+                'text-size': 9,
+                'symbol-placement': 'line-center',
+                'text-allow-overlap': false,
+              }}
+              paint={{
+                'text-color': 'rgba(184, 255, 225, 0.5)',
+                'text-halo-color': '#00104d',
+                'text-halo-width': 1,
+              }}
+              minzoom={7}
+            />
+          </Source>
+        )}
 
         {/* Field circles */}
         {fieldGeoJSON && (

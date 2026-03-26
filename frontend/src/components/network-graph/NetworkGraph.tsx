@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useEffect, useState } from 'react';
+import { useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   MiniMap,
@@ -7,6 +7,8 @@ import {
   BackgroundVariant,
   useNodesState,
   useEdgesState,
+  useReactFlow,
+  ReactFlowProvider,
   type Node,
   type Edge,
 } from '@xyflow/react';
@@ -18,22 +20,27 @@ import { FacilityNode } from './FacilityNode';
 import { ProcessingNode } from './ProcessingNode';
 import { TerminalNode } from './TerminalNode';
 import { PipelineEdge } from './PipelineEdge';
+import { NetworkLegend } from './NetworkLegend';
 import { Loader2 } from 'lucide-react';
 
 const nodeTypes = {
   field: FieldNode,
   facility: FacilityNode,
   processing: ProcessingNode,
+  processing_plant: ProcessingNode,
   terminal: TerminalNode,
+  export_terminal: TerminalNode,
 };
 
 const edgeTypes = {
   pipeline: PipelineEdge,
 };
 
-export function NetworkGraph() {
+function NetworkGraphInner() {
   const selectedFieldNpdid = useScenarioStore((s) => s.selectedFieldNpdid);
   const { data: network, isLoading, error } = useNetwork(selectedFieldNpdid);
+  const { fitView } = useReactFlow();
+  const prevFieldRef = useRef<number | null | undefined>(undefined);
 
   const { initialNodes, initialEdges } = useMemo(() => {
     if (!network) return { initialNodes: [], initialEdges: [] };
@@ -41,11 +48,13 @@ export function NetworkGraph() {
     const nodes: Node[] = network.nodes.map((n, i) => ({
       id: n.id,
       type: n.type || 'facility',
-      position: n.position ?? { x: (i % 6) * 200, y: Math.floor(i / 6) * 150 },
+      position: n.position ?? { x: (i % 8) * 220, y: Math.floor(i / 8) * 180 },
       data: {
-        label: n.label,
+        label: n.data?.label ?? n.label,
         ...n.data,
-        selected: n.data.npdid === selectedFieldNpdid,
+        // Map co2_mol_pct to co2 for FieldNode component
+        co2: n.data?.co2_mol_pct ?? n.data?.co2,
+        selected: n.data?.npdid === selectedFieldNpdid,
       },
     }));
 
@@ -54,7 +63,15 @@ export function NetworkGraph() {
       source: e.source,
       target: e.target,
       type: 'pipeline',
-      data: e.data,
+      data: {
+        ...e.data,
+        // Map backend field names to frontend component expectations
+        name: e.label || e.data?.label,
+        diameter: e.data?.diameter_inches ?? e.data?.diameter,
+        co2Limit: e.data?.co2_limit ?? e.data?.co2Limit,
+        tariff: e.data?.tariff_nok_sm3 ?? e.data?.tariff,
+        medium: e.data?.medium,
+      },
     }));
 
     return { initialNodes: nodes, initialEdges: edges };
@@ -68,6 +85,18 @@ export function NetworkGraph() {
     setNodes(initialNodes);
     setEdges(initialEdges);
   }, [initialNodes, initialEdges, setNodes, setEdges]);
+
+  // Smooth fitView when field selection changes
+  useEffect(() => {
+    if (prevFieldRef.current !== selectedFieldNpdid && initialNodes.length > 0) {
+      // Small delay to let React Flow layout the nodes
+      const timer = setTimeout(() => {
+        fitView({ padding: 0.15, duration: 600 });
+      }, 100);
+      prevFieldRef.current = selectedFieldNpdid;
+      return () => clearTimeout(timer);
+    }
+  }, [selectedFieldNpdid, initialNodes, fitView]);
 
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
@@ -110,10 +139,12 @@ export function NetworkGraph() {
       <div className="w-full h-full flex items-center justify-center bg-surface">
         <div className="text-center">
           <p className="text-text-secondary text-sm">
-            Select a field to view its network
+            {selectedFieldNpdid
+              ? 'No network data for selected field'
+              : 'Loading infrastructure network...'}
           </p>
           <p className="text-text-secondary/60 text-xs mt-1">
-            Or view the full infrastructure network
+            Select a field to view its transport route
           </p>
         </div>
       </div>
@@ -121,7 +152,7 @@ export function NetworkGraph() {
   }
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full relative">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -131,23 +162,70 @@ export function NetworkGraph() {
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
-        minZoom={0.1}
-        maxZoom={2}
+        fitViewOptions={{ padding: 0.15 }}
+        minZoom={0.05}
+        maxZoom={2.5}
         proOptions={{ hideAttribution: true }}
+        defaultEdgeOptions={{ type: 'pipeline' }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="rgba(184,255,225,0.05)" />
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={24}
+          size={1}
+          color="rgba(0, 212, 170, 0.06)"
+        />
         <MiniMap
+          position="bottom-right"
           nodeStrokeWidth={3}
           nodeColor={(n) => {
             if (n.type === 'field') return '#51cf66';
-            if (n.type === 'processing') return '#00d4aa';
-            if (n.type === 'terminal') return '#ffa94d';
+            if (n.type === 'processing' || n.type === 'processing_plant') return '#00d4aa';
+            if (n.type === 'terminal' || n.type === 'export_terminal') return '#ffa94d';
             return '#4a6fa5';
           }}
-          maskColor="rgba(0,16,77,0.7)"
+          maskColor="rgba(0, 16, 77, 0.75)"
+          style={{
+            background: '#00104d',
+            border: '1px solid rgba(184, 255, 225, 0.15)',
+            borderRadius: 8,
+          }}
         />
-        <Controls />
+        <Controls
+          position="bottom-left"
+          showInteractive={false}
+        />
       </ReactFlow>
+
+      {/* Legend overlay */}
+      <NetworkLegend />
+
+      {/* Selected field indicator */}
+      {selectedFieldNpdid && (
+        <div
+          className="absolute top-3 left-3 z-10 flex items-center gap-2 px-3 py-1.5 rounded-lg text-[11px]"
+          style={{
+            background: 'rgba(10, 22, 40, 0.9)',
+            border: '1px solid rgba(0, 212, 170, 0.3)',
+          }}
+        >
+          <div className="w-2 h-2 rounded-full bg-teal-dark animate-pulse" />
+          <span className="text-text-secondary">Subgraph view</span>
+          <button
+            className="text-text-secondary hover:text-text-primary text-[10px] ml-1 cursor-pointer bg-transparent border-none"
+            onClick={() => useScenarioStore.getState().setSelectedField(null)}
+          >
+            [show all]
+          </button>
+        </div>
+      )}
     </div>
+  );
+}
+
+export function NetworkGraph() {
+  return (
+    <ReactFlowProvider>
+      <NetworkGraphInner />
+    </ReactFlowProvider>
   );
 }

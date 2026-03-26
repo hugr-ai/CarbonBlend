@@ -105,6 +105,63 @@ def list_pipelines(
     return [PipelineOut.model_validate(p) for p in query.order_by(Pipeline.name).all()]
 
 
+# --- Pipeline GeoJSON (lines connecting facilities) --- must be before {npdid}
+
+@router.get("/pipelines/geojson")
+def pipelines_geojson(db: Session = Depends(get_db)):
+    """Return pipelines as GeoJSON LineString features connecting from/to facilities."""
+    pipelines = db.query(Pipeline).all()
+
+    # Build facility coordinate lookup
+    facilities = db.query(Facility).all()
+    fac_coords: dict[int, tuple[float, float]] = {}
+    fac_coords_by_name: dict[str, tuple[float, float]] = {}
+    for fac in facilities:
+        if fac.lat is not None and fac.lon is not None:
+            fac_coords[fac.npdid_facility] = (fac.lon, fac.lat)
+            if fac.name:
+                fac_coords_by_name[fac.name] = (fac.lon, fac.lat)
+
+    features = []
+    for pipe in pipelines:
+        # Resolve from/to coordinates
+        from_coord = None
+        to_coord = None
+
+        if pipe.from_facility_id and pipe.from_facility_id in fac_coords:
+            from_coord = fac_coords[pipe.from_facility_id]
+        elif pipe.from_facility and pipe.from_facility in fac_coords_by_name:
+            from_coord = fac_coords_by_name[pipe.from_facility]
+
+        if pipe.to_facility_id and pipe.to_facility_id in fac_coords:
+            to_coord = fac_coords[pipe.to_facility_id]
+        elif pipe.to_facility and pipe.to_facility in fac_coords_by_name:
+            to_coord = fac_coords_by_name[pipe.to_facility]
+
+        if from_coord and to_coord:
+            features.append({
+                "type": "Feature",
+                "properties": {
+                    "name": pipe.name,
+                    "medium": pipe.medium,
+                    "diameter_inches": pipe.diameter_inches,
+                    "main_grouping": pipe.main_grouping,
+                    "operator": pipe.operator,
+                    "from_facility": pipe.from_facility,
+                    "to_facility": pipe.to_facility,
+                },
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [list(from_coord), list(to_coord)],
+                },
+            })
+
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+    }
+
+
 @router.get("/pipelines/{npdid}", response_model=PipelineOut)
 def get_pipeline(npdid: int, db: Session = Depends(get_db)) -> PipelineOut:
     """Get a single pipeline by NPDID."""
