@@ -31,6 +31,7 @@ export interface FieldParams {
   co2_min?: number;
   co2_max?: number;
   search?: string;
+  operator?: string;
 }
 
 export async function getFields(params?: FieldParams): Promise<Field[]> {
@@ -43,8 +44,28 @@ export async function getField(npdid: number): Promise<Field> {
   return data;
 }
 
-export async function getDiscoveries(): Promise<Discovery[]> {
-  const { data } = await api.get('/discoveries');
+export async function getDiscoveries(params?: FieldParams): Promise<Discovery[]> {
+  const { data } = await api.get('/discoveries', { params });
+  return data;
+}
+
+// ── Network Paths ────────────────────────────────────────────────────
+
+export interface PathToTerminal {
+  node_ids: string[];
+  node_labels: string[];
+  terminal_name: string;
+  total_tariff_nok_sm3: number;
+  co2_at_entry: number | null;
+  co2_at_exit: number | null;
+  path_length: number;
+  pipelines: string[];
+}
+
+export async function getPathsToTerminals(
+  fieldNpdid: number
+): Promise<PathToTerminal[]> {
+  const { data } = await api.get(`/network/paths/${fieldNpdid}`);
   return data;
 }
 
@@ -164,7 +185,7 @@ export async function getTariffs(): Promise<
 export async function calculateRouteCost(
   segments: string[]
 ): Promise<{ total_nok_sm3: number; total_musd_yr: number; breakdown: unknown[] }> {
-  const { data } = await api.post('/tariffs/route-cost', { segments });
+  const { data } = await api.post('/tariffs/route-cost', { route_segments: segments });
   return data;
 }
 
@@ -191,23 +212,92 @@ export async function getCapacityStatus(): Promise<
   return data;
 }
 
+// ── UMM (Urgent Market Messages) ─────────────────────────────────────
+
+export interface UMMEvent {
+  title: string;
+  summary: string;
+  event_type: string;
+  facility: string | null;
+  capacity_reduction_pct: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  published: string | null;
+  link: string | null;
+}
+
+export interface UMMCapacityStatus {
+  facility: string;
+  status: 'green' | 'amber' | 'red';
+  event_count: number;
+  active_reductions: UMMEvent[];
+  total_capacity_impact_pct: number | null;
+  has_active_event: boolean;
+}
+
+export async function getUMMEvents(): Promise<UMMEvent[]> {
+  const { data } = await api.get('/umm');
+  return data;
+}
+
+export async function getUMMCapacityStatus(): Promise<UMMCapacityStatus[]> {
+  const { data } = await api.get('/umm/capacity-status');
+  return data;
+}
+
 // ── Scenarios CRUD ────────────────────────────────────────────────────
 
 export async function getScenarios(): Promise<Scenario[]> {
   const { data } = await api.get('/scenarios');
-  return data;
+  return (data as Record<string, unknown>[]).map(mapScenarioResponse);
 }
 
 export async function createScenario(
   scenario: Omit<Scenario, 'id' | 'created_at'>
 ): Promise<Scenario> {
-  const { data } = await api.post('/scenarios', scenario);
-  return data;
+  // Map frontend Scenario shape to backend ScenarioCreate shape
+  const payload = {
+    name: scenario.name,
+    description: scenario.description,
+    source_field_npdid: scenario.source_field_npdid,
+    gas_flow_rate_mscm_d: scenario.gas_flow_rate_mscm_d,
+    co2_mol_pct: scenario.co2_mol_pct,
+    config_json: {
+      ...scenario.config,
+      source_field_name: scenario.source_field_name,
+    },
+  };
+  const { data } = await api.post('/scenarios', payload);
+  // Map backend response back to frontend Scenario shape
+  return mapScenarioResponse(data);
+}
+
+function mapScenarioResponse(data: Record<string, unknown>): Scenario {
+  const configJson = (data.config_json ?? {}) as Record<string, unknown>;
+  const resultJson = data.result_json as Record<string, unknown> | null;
+  return {
+    id: data.id as string,
+    name: data.name as string,
+    description: (data.description as string) ?? '',
+    source_field_npdid: data.source_field_npdid as number,
+    source_field_name: (configJson.source_field_name as string) ?? '',
+    gas_flow_rate_mscm_d: data.gas_flow_rate_mscm_d as number,
+    co2_mol_pct: data.co2_mol_pct as number,
+    config: {
+      strategy: (configJson.strategy as ScenarioConfig['strategy']) ?? 'direct',
+      target_co2_mol_pct: (configJson.target_co2_mol_pct as number) ?? 2.5,
+      target_terminals: (configJson.target_terminals as string[]) ?? [],
+      storage_site: (configJson.storage_site as string) ?? '',
+      hub_prices: (configJson.hub_prices as Record<string, number>) ?? {},
+    },
+    result: resultJson as unknown as OptimizationResult | undefined,
+    created_at: data.created_at as string,
+  };
 }
 
 export async function getScenario(id: string): Promise<Scenario> {
   const { data } = await api.get(`/scenarios/${id}`);
-  return data;
+  return mapScenarioResponse(data as Record<string, unknown>);
 }
 
 export async function updateScenario(
@@ -298,4 +388,90 @@ export async function valueOfInformation(requestData: {
 }): Promise<{ voi_musd: number; recommendation: string }> {
   const { data } = await api.post('/decisions/voi', requestData);
   return data;
+}
+
+// ── Hub Balance ──────────────────────────────────────────────────────
+
+export interface HubFlowStream {
+  source?: string;
+  destination?: string;
+  type: string;
+  co2_mol_pct: number | null;
+  flow_mscm_d: number | null;
+  pipeline: string | null;
+}
+
+export interface HubBalance {
+  hub_name: string;
+  npdid: number;
+  inputs: HubFlowStream[];
+  outputs: HubFlowStream[];
+  blended_co2_mol_pct: number | null;
+  total_input_mscm_d: number;
+  total_output_mscm_d: number;
+  co2_removal_at_hub: boolean;
+}
+
+export async function getHubBalance(facilityNpdid: number): Promise<HubBalance> {
+  const { data } = await api.get(`/network/hub-balance/${facilityNpdid}`);
+  return data;
+}
+
+// ── Report Export ────────────────────────────────────────────────────
+
+export async function downloadReport(scenarioId: string): Promise<void> {
+  const response = await api.get(`/export/report/${scenarioId}`, { responseType: 'blob' });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `carbonblend-report-${scenarioId}.xlsx`;
+  link.click();
+  window.URL.revokeObjectURL(url);
+}
+
+// ── Enhanced Route Cost ──────────────────────────────────────────────
+
+export interface SegmentCostDetail {
+  pipeline_segment: string;
+  baa: string | null;
+  k_element: number | null;
+  u_element: number | null;
+  i_element: number | null;
+  o_element: number | null;
+  unit_tariff_nok_sm3: number;
+  cumulative_tariff_nok_sm3: number;
+  year: number | null;
+}
+
+export interface EnhancedRouteCostResponse {
+  segments: SegmentCostDetail[];
+  missing_segments: string[];
+  total_k_element: number;
+  total_u_element: number;
+  total_i_element: number;
+  total_o_element: number;
+  total_tariff_nok_sm3: number;
+  annualized_cost_mnok: number | null;
+  num_segments: number;
+}
+
+export async function calculateEnhancedRouteCost(
+  routeSegments: string[],
+  flowRateMscmD?: number,
+): Promise<EnhancedRouteCostResponse> {
+  const { data } = await api.post('/tariffs/route-cost', {
+    route_segments: routeSegments,
+    flow_rate_mscm_d: flowRateMscmD,
+  });
+  return data;
+}
+
+export async function getAvailableSegments(): Promise<
+  Array<{ pipeline_segment: string; unit_tariff_nok_sm3: number | null }>
+> {
+  const { data } = await api.get('/tariffs');
+  return data.map((t: Record<string, unknown>) => ({
+    pipeline_segment: t.pipeline_segment,
+    unit_tariff_nok_sm3: t.unit_tariff_nok_sm3,
+  }));
 }

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { RotateCcw } from 'lucide-react';
 
 const defaultWeights: Record<string, number> = {
@@ -8,7 +8,11 @@ const defaultWeights: Record<string, number> = {
   Strategic: 20,
 };
 
-export function WeightSliders() {
+interface WeightSlidersProps {
+  onChange?: (normalizedWeights: Record<string, number>) => void;
+}
+
+export function WeightSliders({ onChange }: WeightSlidersProps) {
   const [weights, setWeights] = useState<Record<string, number>>({ ...defaultWeights });
 
   const isModified = useMemo(
@@ -20,6 +24,20 @@ export function WeightSliders() {
   );
 
   const total = Object.values(weights).reduce((s, v) => s + v, 0);
+
+  // Compute normalized weights (0-1 range summing to 1)
+  const normalizedWeights = useMemo(() => {
+    const result: Record<string, number> = {};
+    for (const [key, val] of Object.entries(weights)) {
+      result[key] = total > 0 ? val / total : 0;
+    }
+    return result;
+  }, [weights, total]);
+
+  // Notify parent of weight changes
+  useEffect(() => {
+    onChange?.(normalizedWeights);
+  }, [normalizedWeights, onChange]);
 
   const handleChange = (category: string, value: number) => {
     setWeights((prev) => ({ ...prev, [category]: value }));

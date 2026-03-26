@@ -1,8 +1,10 @@
-import { useState, useMemo } from 'react';
-import { ChevronRight, ChevronLeft, Save, Search, Loader2 } from 'lucide-react';
+import { useState, useMemo, useCallback } from 'react';
+import { ChevronRight, ChevronLeft, Save, Search, Loader2, Play, CheckCircle2 } from 'lucide-react';
 import { useFields } from '@/hooks/useFields';
 import { useCreateScenario } from '@/hooks/useScenario';
-import { formatCO2, getCO2Color, calculateBlend } from '@/utils/co2Calculations';
+import { useOptimization } from '@/hooks/useOptimization';
+import { useScenarioStore } from '@/stores/scenarioStore';
+import { formatCO2, getCO2Color } from '@/utils/co2Calculations';
 import { formatFlow, formatCost } from '@/utils/formatters';
 import type { ScenarioConfig } from '@/types/scenario';
 
@@ -35,9 +37,12 @@ export function ScenarioBuilder() {
   const [targetTerminals, setTargetTerminals] = useState<string[]>([]);
   const [storageSite, setStorageSite] = useState('Northern Lights');
   const [scenarioName, setScenarioName] = useState('');
+  const [scenarioSaved, setScenarioSaved] = useState(false);
 
   const { data: fields } = useFields();
   const createScenario = useCreateScenario();
+  const optimization = useOptimization();
+  const setActiveTab = useScenarioStore((s) => s.setActiveTab);
 
   const filteredFields = useMemo(() => {
     if (!fields) return [];
@@ -56,22 +61,41 @@ export function ScenarioBuilder() {
     return base;
   }, [flowRate, strategy, targetTerminals, storageSite, co2MolPct]);
 
+  const buildConfig = useCallback((): ScenarioConfig => ({
+    strategy,
+    target_co2_mol_pct: 2.5,
+    target_terminals: targetTerminals,
+    storage_site: storageSite,
+    hub_prices: {},
+  }), [strategy, targetTerminals, storageSite]);
+
   const handleSave = () => {
     if (!selectedFieldNpdid) return;
-    createScenario.mutate({
-      name: scenarioName || `${selectedFieldName} Scenario`,
-      description: `${strategy} strategy for ${selectedFieldName}`,
+    createScenario.mutate(
+      {
+        name: scenarioName || `${selectedFieldName} Scenario`,
+        description: `${strategy} strategy for ${selectedFieldName}`,
+        source_field_npdid: selectedFieldNpdid,
+        source_field_name: selectedFieldName,
+        gas_flow_rate_mscm_d: flowRate,
+        co2_mol_pct: co2MolPct,
+        config: buildConfig(),
+      },
+      {
+        onSuccess: () => {
+          setScenarioSaved(true);
+        },
+      }
+    );
+  };
+
+  const handleRunOptimization = () => {
+    if (!selectedFieldNpdid) return;
+    optimization.run({
+      ...buildConfig(),
       source_field_npdid: selectedFieldNpdid,
-      source_field_name: selectedFieldName,
       gas_flow_rate_mscm_d: flowRate,
       co2_mol_pct: co2MolPct,
-      config: {
-        strategy,
-        target_co2_mol_pct: 2.5,
-        target_terminals: targetTerminals,
-        storage_site: storageSite,
-        hub_prices: {},
-      },
     });
   };
 
@@ -88,7 +112,7 @@ export function ScenarioBuilder() {
     'Strategy',
     'Target Markets',
     'CO2 Storage',
-    'Review & Save',
+    'Review & Run',
   ];
 
   return (
@@ -130,7 +154,7 @@ export function ScenarioBuilder() {
           {step === 2 && 'Choose how to handle CO2'}
           {step === 3 && 'Select export destination terminals'}
           {step === 4 && 'Configure CO2 storage options'}
-          {step === 5 && 'Review your scenario configuration'}
+          {step === 5 && 'Review your scenario and run optimization'}
         </p>
 
         {/* Step 0: Select Field */}
@@ -188,16 +212,26 @@ export function ScenarioBuilder() {
               <label className="text-sm text-text-secondary">
                 Gas Flow Rate: <span className="font-mono text-teal">{formatFlow(flowRate)}</span>
               </label>
-              <input
-                type="range"
-                min={1}
-                max={100}
-                step={1}
-                value={flowRate}
-                onChange={(e) => setFlowRate(Number(e.target.value))}
-                className="w-full mt-2 accent-teal"
-              />
-              <div className="flex justify-between text-[10px] text-text-secondary">
+              <div className="flex items-center gap-3 mt-2">
+                <input
+                  type="range"
+                  min={1}
+                  max={100}
+                  step={1}
+                  value={flowRate}
+                  onChange={(e) => setFlowRate(Number(e.target.value))}
+                  className="flex-1 accent-teal"
+                />
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={flowRate}
+                  onChange={(e) => setFlowRate(Math.min(100, Math.max(1, Number(e.target.value))))}
+                  className="w-20 px-2 py-1.5 bg-navy text-text-primary text-sm rounded-md border border-border focus:border-teal focus:outline-none text-center font-mono"
+                />
+              </div>
+              <div className="flex justify-between text-[10px] text-text-secondary mt-1">
                 <span>1 MSm3/d</span>
                 <span>100 MSm3/d</span>
               </div>
@@ -344,61 +378,113 @@ export function ScenarioBuilder() {
           </div>
         )}
 
-        {/* Step 5: Review */}
+        {/* Step 5: Review & Run */}
         {step === 5 && (
-          <div className="bg-surface border border-border rounded-xl p-4 space-y-4">
-            <div>
-              <label className="text-xs text-text-secondary">Scenario Name</label>
-              <input
-                type="text"
-                value={scenarioName}
-                onChange={(e) => setScenarioName(e.target.value)}
-                placeholder={`${selectedFieldName} Scenario`}
-                className="w-full mt-1 px-3 py-2 bg-navy text-text-primary rounded-lg border border-border focus:border-teal focus:outline-none"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="bg-navy rounded-lg p-3">
-                <span className="text-text-secondary text-xs">Source Field</span>
-                <p className="font-medium text-text-primary">{selectedFieldName || 'Not selected'}</p>
+          <div className="space-y-4">
+            <div className="bg-surface border border-border rounded-xl p-4 space-y-4">
+              <div>
+                <label className="text-xs text-text-secondary">Scenario Name</label>
+                <input
+                  type="text"
+                  value={scenarioName}
+                  onChange={(e) => setScenarioName(e.target.value)}
+                  placeholder={`${selectedFieldName} Scenario`}
+                  className="w-full mt-1 px-3 py-2 bg-navy text-text-primary rounded-lg border border-border focus:border-teal focus:outline-none"
+                />
               </div>
-              <div className="bg-navy rounded-lg p-3">
-                <span className="text-text-secondary text-xs">Flow Rate</span>
-                <p className="font-medium text-text-primary">{formatFlow(flowRate)}</p>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="bg-navy rounded-lg p-3">
+                  <span className="text-text-secondary text-xs">Source Field</span>
+                  <p className="font-medium text-text-primary">{selectedFieldName || 'Not selected'}</p>
+                </div>
+                <div className="bg-navy rounded-lg p-3">
+                  <span className="text-text-secondary text-xs">Flow Rate</span>
+                  <p className="font-medium text-text-primary">{formatFlow(flowRate)}</p>
+                </div>
+                <div className="bg-navy rounded-lg p-3">
+                  <span className="text-text-secondary text-xs">CO2 Content</span>
+                  <p className="font-medium" style={{ color: getCO2Color(co2MolPct) }}>
+                    {formatCO2(co2MolPct)}
+                  </p>
+                </div>
+                <div className="bg-navy rounded-lg p-3">
+                  <span className="text-text-secondary text-xs">Strategy</span>
+                  <p className="font-medium text-text-primary">
+                    {strategies.find((s) => s.value === strategy)?.label}
+                  </p>
+                </div>
+                <div className="bg-navy rounded-lg p-3">
+                  <span className="text-text-secondary text-xs">Terminals</span>
+                  <p className="font-medium text-text-primary">
+                    {targetTerminals.length > 0
+                      ? targetTerminals
+                          .map((id) => terminals.find((t) => t.id === id)?.name)
+                          .join(', ')
+                      : 'None'}
+                  </p>
+                </div>
+                <div className="bg-navy rounded-lg p-3">
+                  <span className="text-text-secondary text-xs">Storage</span>
+                  <p className="font-medium text-text-primary">{storageSite}</p>
+                </div>
               </div>
-              <div className="bg-navy rounded-lg p-3">
-                <span className="text-text-secondary text-xs">CO2 Content</span>
-                <p className="font-medium" style={{ color: getCO2Color(co2MolPct) }}>
-                  {formatCO2(co2MolPct)}
+              <div className="bg-teal-dim border border-teal/20 rounded-lg p-3">
+                <span className="text-xs text-text-secondary">Estimated Annual Cost</span>
+                <p className="text-lg font-semibold text-teal">
+                  {formatCost(estimatedCost)}
                 </p>
               </div>
-              <div className="bg-navy rounded-lg p-3">
-                <span className="text-text-secondary text-xs">Strategy</span>
-                <p className="font-medium text-text-primary">
-                  {strategies.find((s) => s.value === strategy)?.label}
+            </div>
+
+            {/* Optimization Results */}
+            {optimization.status === 'complete' && optimization.result && (
+              <div className="bg-surface border border-teal/30 rounded-xl p-4 space-y-3">
+                <h3 className="text-sm font-semibold text-teal flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Optimization Results
+                </h3>
+                <p className="text-xs text-text-secondary">
+                  Found {optimization.result.existing_pathways?.length ?? 0} viable pathways
+                </p>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {(optimization.result.existing_pathways ?? []).slice(0, 5).map((pathway, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-navy rounded-lg p-3 border border-border"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium text-text-primary">
+                          #{idx + 1} {pathway.terminal ?? pathway.name}
+                        </span>
+                        <span className="text-xs font-semibold text-teal">
+                          {formatCost(pathway.total_cost_musd_yr)}/yr
+                        </span>
+                      </div>
+                      {pathway.steps && pathway.steps.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {pathway.steps.map((s, si) => (
+                            <span
+                              key={si}
+                              className="text-[10px] px-1.5 py-0.5 rounded bg-surface-light text-text-secondary"
+                            >
+                              {s.location}: {formatCO2(s.co2_in)} -&gt; {formatCO2(s.co2_out)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {optimization.status === 'failed' && (
+              <div className="bg-surface border border-danger/30 rounded-xl p-4">
+                <p className="text-xs text-danger">
+                  Optimization failed: {optimization.error}
                 </p>
               </div>
-              <div className="bg-navy rounded-lg p-3">
-                <span className="text-text-secondary text-xs">Terminals</span>
-                <p className="font-medium text-text-primary">
-                  {targetTerminals.length > 0
-                    ? targetTerminals
-                        .map((id) => terminals.find((t) => t.id === id)?.name)
-                        .join(', ')
-                    : 'None'}
-                </p>
-              </div>
-              <div className="bg-navy rounded-lg p-3">
-                <span className="text-text-secondary text-xs">Storage</span>
-                <p className="font-medium text-text-primary">{storageSite}</p>
-              </div>
-            </div>
-            <div className="bg-teal-dim border border-teal/20 rounded-lg p-3">
-              <span className="text-xs text-text-secondary">Estimated Annual Cost</span>
-              <p className="text-lg font-semibold text-teal">
-                {formatCost(estimatedCost)}
-              </p>
-            </div>
+            )}
           </div>
         )}
 
@@ -422,20 +508,48 @@ export function ScenarioBuilder() {
               <ChevronRight className="w-4 h-4" />
             </button>
           ) : (
-            <button
-              onClick={handleSave}
-              disabled={createScenario.isPending}
-              className="flex items-center gap-1.5 px-5 py-2 bg-teal text-navy rounded-lg text-sm font-semibold hover:bg-teal/90 disabled:opacity-50 transition-colors"
-            >
-              {createScenario.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Save className="w-4 h-4" />
-              )}
-              Save Scenario
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleRunOptimization}
+                disabled={!selectedFieldNpdid || optimization.status === 'running' || optimization.status === 'pending'}
+                className="flex items-center gap-1.5 px-4 py-2 bg-surface border border-teal/40 text-teal rounded-lg text-sm font-medium hover:bg-teal-dim disabled:opacity-40 transition-colors"
+              >
+                {optimization.status === 'running' || optimization.status === 'pending' ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Play className="w-4 h-4" />
+                )}
+                Run Optimization
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={createScenario.isPending || scenarioSaved}
+                className="flex items-center gap-1.5 px-5 py-2 bg-teal text-navy rounded-lg text-sm font-semibold hover:bg-teal/90 disabled:opacity-50 transition-colors"
+              >
+                {createScenario.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : scenarioSaved ? (
+                  <CheckCircle2 className="w-4 h-4" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                {scenarioSaved ? 'Saved' : 'Save Scenario'}
+              </button>
+            </div>
           )}
         </div>
+
+        {/* Link to view saved scenarios */}
+        {scenarioSaved && (
+          <div className="mt-4 text-center">
+            <button
+              onClick={() => setActiveTab('scenarios')}
+              className="text-sm text-teal hover:underline"
+            >
+              View saved scenarios
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

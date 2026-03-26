@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Play, Trash2, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { Play, Trash2, ChevronDown, ChevronUp, Loader2, Route, FileSpreadsheet } from 'lucide-react';
 import { useScenarios, useDeleteScenario } from '@/hooks/useScenario';
 import { useOptimization } from '@/hooks/useOptimization';
 import { useScenarioStore } from '@/stores/scenarioStore';
 import { formatCO2, getCO2Color } from '@/utils/co2Calculations';
 import { formatCost, formatFlow } from '@/utils/formatters';
+import { downloadReport } from '@/api/client';
 
 export function ScenarioPanel() {
   const { scenarios, activeScenario } = useScenarios();
@@ -45,6 +46,7 @@ export function ScenarioPanel() {
       {scenarios.map((scenario) => {
         const isActive = scenario.id === activeScenarioId;
         const isExpanded = expanded === scenario.id;
+        const optResult = scenario.result;
 
         return (
           <div
@@ -73,7 +75,7 @@ export function ScenarioPanel() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                {scenario.result && (
+                {optResult && (
                   <span className="text-xs bg-success/20 text-success px-2 py-0.5 rounded-full">
                     Optimized
                   </span>
@@ -107,15 +109,57 @@ export function ScenarioPanel() {
                   </div>
                 </div>
 
-                {scenario.result && (
-                  <div className="bg-teal-dim border border-teal/20 rounded-lg p-3">
-                    <span className="text-xs text-text-secondary">Best Pathway Cost</span>
-                    <p className="text-lg font-semibold text-teal">
-                      {formatCost(
-                        scenario.result.existing_pathways[0]?.total_cost_musd_yr ?? 0
-                      )}
-                      <span className="text-xs font-normal text-text-secondary">/yr</span>
-                    </p>
+                {/* Optimization Results */}
+                {optResult && optResult.existing_pathways && optResult.existing_pathways.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="bg-teal-dim border border-teal/20 rounded-lg p-3">
+                      <span className="text-xs text-text-secondary">Best Pathway Cost</span>
+                      <p className="text-lg font-semibold text-teal">
+                        {formatCost(
+                          optResult.existing_pathways[0]?.total_cost_musd_yr ?? 0
+                        )}
+                        <span className="text-xs font-normal text-text-secondary">/yr</span>
+                      </p>
+                    </div>
+
+                    <div className="text-xs text-text-secondary flex items-center gap-1">
+                      <Route className="w-3 h-3" />
+                      {optResult.existing_pathways.length} pathway
+                      {optResult.existing_pathways.length !== 1 ? 's' : ''} found
+                    </div>
+
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {optResult.existing_pathways.slice(0, 3).map((pathway, idx) => (
+                        <div key={idx} className="bg-navy rounded-lg p-2 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-text-primary font-medium">
+                              #{idx + 1} {pathway.terminal ?? pathway.name}
+                            </span>
+                            <span className="text-teal font-mono">
+                              {formatCost(pathway.total_cost_musd_yr)}/yr
+                            </span>
+                          </div>
+                          {pathway.steps && pathway.steps.length > 0 && (
+                            <div className="mt-1 text-text-secondary">
+                              {pathway.steps.map((s) => s.location).join(' > ')}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Inline optimization status for active scenario */}
+                {isActive && optimization.status === 'running' && (
+                  <div className="flex items-center gap-2 text-xs text-text-secondary">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-teal" />
+                    Running optimization...
+                  </div>
+                )}
+                {isActive && optimization.status === 'failed' && (
+                  <div className="text-xs text-danger bg-danger/10 rounded-lg p-2">
+                    {optimization.error}
                   </div>
                 )}
 
@@ -131,6 +175,13 @@ export function ScenarioPanel() {
                       <Play className="w-3.5 h-3.5" />
                     )}
                     Run Optimization
+                  </button>
+                  <button
+                    onClick={() => downloadReport(scenario.id).catch(console.error)}
+                    className="px-3 py-2 rounded-lg text-text-secondary hover:bg-teal/10 hover:text-teal transition-colors"
+                    title="Export Report"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => deleteScenario.mutate(scenario.id)}

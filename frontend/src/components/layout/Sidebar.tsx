@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, GitCompare, Zap } from 'lucide-react';
 import { FieldSelector } from '@/components/field-selector/FieldSelector';
+import { UMMOverlay } from '@/components/umm/UMMOverlay';
 import { useScenarioStore } from '@/stores/scenarioStore';
 import { useField } from '@/hooks/useFields';
 import { formatCO2, getCO2Color } from '@/utils/co2Calculations';
@@ -81,6 +82,11 @@ export function Sidebar() {
           </div>
         </div>
       )}
+
+      {/* UMM Feed */}
+      <div className="border-t border-border p-3">
+        <UMMOverlay />
+      </div>
 
       {/* Quick actions */}
       <div className="border-t border-border p-3 space-y-2">
