@@ -1,0 +1,68 @@
+[
+  {
+    "name": "Easington",
+    "country": "UK",
+    "pipeline_feed": "Langeled",
+    "hub_name": "NBP",
+    "default_price": 13.5,
+    "currency": "GBP",
+    "co2_entry_spec_mol_pct": 2.5,
+    "lat": 53.65,
+    "lon": 0.12
+  },
+  {
+    "name": "St. Fergus",
+    "country": "UK",
+    "pipeline_feed": "Vesterled",
+    "hub_name": "NBP",
+    "default_price": 13.5,
+    "currency": "GBP",
+    "co2_entry_spec_mol_pct": 2.5,
+    "lat": 57.58,
+    "lon": -1.83
+  },
+  {
+    "name": "Emden",
+    "country": "Germany",
+    "pipeline_feed": "Norpipe",
+    "hub_name": "THE",
+    "default_price": 42.0,
+    "currency": "EUR",
+    "co2_entry_spec_mol_pct": 2.5,
+    "lat": 53.37,
+    "lon": 7.21
+  },
+  {
+    "name": "Dornum",
+    "country": "Germany",
+    "pipeline_feed": "Europipe I/II",
+    "hub_name": "THE",
+    "default_price": 42.0,
+    "currency": "EUR",
+    "co2_entry_spec_mol_pct": 2.5,
+    "lat": 53.65,
+    "lon": 7.38
+  },
+  {
+    "name": "Zeebrugge",
+    "country": "Belgium",
+    "pipeline_feed": "Zeepipe",
+    "hub_name": "ZTP/TTF",
+    "default_price": 41.5,
+    "currency": "EUR",
+    "co2_entry_spec_mol_pct": 2.5,
+    "lat": 51.33,
+    "lon": 3.20
+  },
+  {
+    "name": "Dunkerque",
+    "country": "France",
+    "pipeline_feed": "Franpipe",
+    "hub_name": "PEG/TRF",
+    "default_price": 43.0,
+    "currency": "EUR",
+    "co2_entry_spec_mol_pct": 2.5,
+    "lat": 51.03,
+    "lon": 2.37
+  }
+]

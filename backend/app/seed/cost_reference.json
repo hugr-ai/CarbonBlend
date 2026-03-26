@@ -1,0 +1,57 @@
+{
+  "processing_options": [
+    {
+      "name": "Amine scrubbing",
+      "capex_per_mtpa": 600.0,
+      "opex_per_tonne": 35.0,
+      "removal_efficiency": 0.95,
+      "energy_penalty_pct": 15.0,
+      "maturity": "TRL 9 – Commercial"
+    },
+    {
+      "name": "Membrane separation",
+      "capex_per_mtpa": 400.0,
+      "opex_per_tonne": 25.0,
+      "removal_efficiency": 0.85,
+      "energy_penalty_pct": 10.0,
+      "maturity": "TRL 7 – Prototype demonstration"
+    },
+    {
+      "name": "Cryogenic separation",
+      "capex_per_mtpa": 800.0,
+      "opex_per_tonne": 40.0,
+      "removal_efficiency": 0.98,
+      "energy_penalty_pct": 20.0,
+      "maturity": "TRL 6 – Technology demonstration"
+    }
+  ],
+  "storage_sites": [
+    {
+      "name": "Sleipner Utsira",
+      "type": "Saline aquifer",
+      "capacity_mt": 600.0,
+      "injection_rate_mtpa": 1.0,
+      "status": "Operating",
+      "lat": 58.4,
+      "lon": 1.9
+    },
+    {
+      "name": "Northern Lights Aurora",
+      "type": "Saline aquifer",
+      "capacity_mt": 100.0,
+      "injection_rate_mtpa": 1.5,
+      "status": "Under development",
+      "lat": 60.8,
+      "lon": 3.5
+    },
+    {
+      "name": "Smeaheia",
+      "type": "Saline aquifer",
+      "capacity_mt": 160.0,
+      "injection_rate_mtpa": 5.0,
+      "status": "Planned",
+      "lat": 60.6,
+      "lon": 3.2
+    }
+  ]
+}

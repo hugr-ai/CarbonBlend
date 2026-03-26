@@ -1,0 +1,83 @@
+[
+  {
+    "pipeline_segment": "Langeled",
+    "baa": "Langeled",
+    "k_element": 0.08,
+    "u_element": 0.01,
+    "i_element": 0.03,
+    "o_element": 0.02,
+    "year": 2024
+  },
+  {
+    "pipeline_segment": "Europipe I",
+    "baa": "Europipe",
+    "k_element": 0.06,
+    "u_element": 0.01,
+    "i_element": 0.02,
+    "o_element": 0.015,
+    "year": 2024
+  },
+  {
+    "pipeline_segment": "Europipe II",
+    "baa": "Europipe",
+    "k_element": 0.07,
+    "u_element": 0.01,
+    "i_element": 0.025,
+    "o_element": 0.018,
+    "year": 2024
+  },
+  {
+    "pipeline_segment": "Franpipe",
+    "baa": "Franpipe",
+    "k_element": 0.07,
+    "u_element": 0.01,
+    "i_element": 0.025,
+    "o_element": 0.02,
+    "year": 2024
+  },
+  {
+    "pipeline_segment": "Zeepipe",
+    "baa": "Zeepipe",
+    "k_element": 0.065,
+    "u_element": 0.01,
+    "i_element": 0.022,
+    "o_element": 0.017,
+    "year": 2024
+  },
+  {
+    "pipeline_segment": "Norpipe",
+    "baa": "Norpipe",
+    "k_element": 0.05,
+    "u_element": 0.008,
+    "i_element": 0.018,
+    "o_element": 0.014,
+    "year": 2024
+  },
+  {
+    "pipeline_segment": "Åsgard Transport",
+    "baa": "Åsgard Transport",
+    "k_element": 0.09,
+    "u_element": 0.012,
+    "i_element": 0.03,
+    "o_element": 0.022,
+    "year": 2024
+  },
+  {
+    "pipeline_segment": "Polarled",
+    "baa": "Polarled",
+    "k_element": 0.085,
+    "u_element": 0.01,
+    "i_element": 0.028,
+    "o_element": 0.02,
+    "year": 2024
+  },
+  {
+    "pipeline_segment": "Statpipe",
+    "baa": "Statpipe",
+    "k_element": 0.055,
+    "u_element": 0.008,
+    "i_element": 0.02,
+    "o_element": 0.016,
+    "year": 2024
+  }
+]

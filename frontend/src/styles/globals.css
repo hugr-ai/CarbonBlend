@@ -1,0 +1,131 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy: #00104d;
+  --color-navy-light: #001a6e;
+  --color-navy-lighter: #002299;
+  --color-teal: #b8ffe1;
+  --color-teal-dark: #00d4aa;
+  --color-teal-dim: rgba(184, 255, 225, 0.1);
+  --color-surface: #0a1628;
+  --color-surface-light: #121f3d;
+  --color-border: rgba(184, 255, 225, 0.15);
+  --color-text-primary: #e8edf5;
+  --color-text-secondary: #8899bb;
+  --color-danger: #ff6b6b;
+  --color-warning: #ffa94d;
+  --color-success: #51cf66;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-navy);
+  color: var(--color-text-primary);
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-navy);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(184, 255, 225, 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(184, 255, 225, 0.35);
+}
+
+/* React Flow dark theme overrides */
+.react-flow {
+  --xy-background-color: var(--color-surface) !important;
+  --xy-node-border-radius: 8px;
+  --xy-edge-stroke: rgba(184, 255, 225, 0.3);
+  --xy-edge-stroke-selected: var(--color-teal);
+  --xy-minimap-background: var(--color-navy);
+  --xy-minimap-mask-background: rgba(0, 16, 77, 0.7);
+  --xy-controls-button-background: var(--color-surface-light);
+  --xy-controls-button-color: var(--color-teal);
+  --xy-controls-button-border-color: var(--color-border);
+}
+
+.react-flow__minimap {
+  background: var(--color-navy) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 8px !important;
+}
+
+.react-flow__controls {
+  border: 1px solid var(--color-border) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background: var(--color-surface-light) !important;
+  border-bottom-color: var(--color-border) !important;
+  fill: var(--color-teal) !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--color-navy-light) !important;
+}
+
+/* MapLibre overrides */
+.maplibregl-ctrl-attrib {
+  background: rgba(0, 16, 77, 0.8) !important;
+  color: var(--color-text-secondary) !important;
+  font-size: 10px !important;
+}
+
+.maplibregl-ctrl-attrib a {
+  color: var(--color-teal-dark) !important;
+}
+
+/* Pulse animation for selected field */
+@keyframes pulse-teal {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(184, 255, 225, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(184, 255, 225, 0);
+  }
+}
+
+.animate-pulse-teal {
+  animation: pulse-teal 2s ease-in-out infinite;
+}
+
+/* Flow dots animation */
+@keyframes flow-dots {
+  0% {
+    stroke-dashoffset: 24;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-flow {
+  animation: flow-dots 1s linear infinite;
+}
