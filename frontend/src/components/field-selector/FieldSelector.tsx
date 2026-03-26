@@ -4,13 +4,14 @@ import { useFields } from '@/hooks/useFields';
 import { useScenarioStore } from '@/stores/scenarioStore';
 import { FieldCard } from './FieldCard';
 import { FieldFilters } from './FieldFilters';
-import type { FieldParams } from '@/api/client';
 
 export function FieldSelector() {
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState<FieldParams>({});
 
+  const filters = useScenarioStore((s) => s.filters);
+  const setFilters = useScenarioStore((s) => s.setFilters);
+  const resetFilters = useScenarioStore((s) => s.resetFilters);
   const selectedFieldNpdid = useScenarioStore((s) => s.selectedFieldNpdid);
   const setSelectedField = useScenarioStore((s) => s.setSelectedField);
 
@@ -26,6 +27,16 @@ export function FieldSelector() {
         (f.operator ?? '').toLowerCase().includes(q)
     );
   }, [fields, search]);
+
+  const activeFilterCount = [
+    filters.area,
+    filters.status,
+    filters.hc_type,
+    filters.operator,
+    filters.co2_min != null ? true : null,
+    filters.co2_max != null ? true : null,
+    filters.assetType !== 'fields' ? true : null,
+  ].filter(Boolean).length;
 
   return (
     <div className="flex flex-col">
@@ -50,6 +61,11 @@ export function FieldSelector() {
       >
         <Filter className="w-3 h-3" />
         Filters
+        {activeFilterCount > 0 && (
+          <span className="ml-1 px-1.5 py-0.5 rounded-full bg-teal/20 text-teal text-[10px] font-semibold">
+            {activeFilterCount}
+          </span>
+        )}
         {showFilters ? (
           <ChevronUp className="w-3 h-3" />
         ) : (
@@ -57,7 +73,29 @@ export function FieldSelector() {
         )}
       </button>
 
-      {showFilters && <FieldFilters filters={filters} onFiltersChange={setFilters} />}
+      {showFilters && (
+        <FieldFilters
+          filters={filters}
+          onFiltersChange={setFilters}
+          onReset={resetFilters}
+        />
+      )}
+
+      {/* Result count header */}
+      {!isLoading && filtered.length > 0 && (
+        <div className="px-3 py-1 flex items-center justify-between">
+          <span className="text-[10px] text-text-secondary">
+            {filtered.length} {filters.assetType === 'discoveries' ? 'discovery' : 'field'}
+            {filtered.length !== 1 && filters.assetType !== 'discoveries' ? 's' : ''}
+            {filtered.length !== 1 && filters.assetType === 'discoveries' ? ' discoveries' : ''}
+          </span>
+          {activeFilterCount > 0 && (
+            <span className="text-[10px] text-teal">
+              {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Field list */}
       <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
@@ -93,12 +131,6 @@ export function FieldSelector() {
             }
           />
         ))}
-
-        {!isLoading && filtered.length > 0 && (
-          <div className="text-center py-2 text-[10px] text-text-secondary">
-            {filtered.length} field{filtered.length !== 1 ? 's' : ''}
-          </div>
-        )}
       </div>
     </div>
   );

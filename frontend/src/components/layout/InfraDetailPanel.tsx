@@ -1,5 +1,7 @@
-import { X, ArrowRight, Gauge, Droplets, TrendingUp, Factory, Anchor, MapPin } from 'lucide-react';
+import { useState } from 'react';
+import { X, ArrowRight, Gauge, Droplets, TrendingUp, Factory, Anchor, MapPin, GitBranch } from 'lucide-react';
 import { getCO2Color } from '@/utils/co2Calculations';
+import { HubBalancePanel } from '@/components/network-graph/HubBalancePanel';
 
 /** Estimate pipeline capacity from diameter (MSm3/d) using industry rule-of-thumb */
 function estimateCapacity(diameterInches: number | null | undefined, medium?: string): number | null {
@@ -225,10 +227,11 @@ interface FacilityData {
   currency?: string;
 }
 
-function FacilityDetail({ data, entityType }: { data: FacilityData & { label?: string }; entityType: string }) {
+function FacilityDetail({ data, entityType, onShowHubBalance }: { data: FacilityData & { label?: string; is_hub?: boolean; npdid?: number }; entityType: string; onShowHubBalance?: (npdid: number, name: string) => void }) {
   const isPlant = entityType === 'processing_plant' || entityType === 'processing';
   const isTerminal = entityType === 'export_terminal' || entityType === 'terminal';
   const isField = entityType === 'field';
+  const isHub = !isPlant && !isTerminal && !isField && data.is_hub;
   const displayName = data.name || data.label || 'Unknown';
 
   return (
@@ -371,6 +374,17 @@ function FacilityDetail({ data, entityType }: { data: FacilityData & { label?: s
           Part of: <span className="text-teal-dark">{data.belongs_to_name}</span>
         </div>
       )}
+
+      {/* Hub flow balance button */}
+      {isHub && data.npdid && onShowHubBalance && (
+        <button
+          onClick={() => onShowHubBalance(data.npdid!, displayName)}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-teal/10 border border-teal/30 text-teal rounded-lg text-xs font-medium hover:bg-teal/20 transition-colors cursor-pointer"
+        >
+          <GitBranch className="w-3.5 h-3.5" />
+          View Flow Balance
+        </button>
+      )}
     </div>
   );
 }
@@ -404,35 +418,51 @@ interface InfraDetailPanelProps {
 }
 
 export function InfraDetailPanel({ selection, onClose }: InfraDetailPanelProps) {
+  const [hubBalance, setHubBalance] = useState<{ npdid: number; name: string } | null>(null);
+
   if (!selection) return null;
 
   const isPipeline = selection.type === 'pipeline';
 
   return (
-    <div
-      className="absolute right-0 top-0 bottom-0 z-20 overflow-y-auto"
-      style={{
-        width: 320,
-        background: 'rgba(0, 16, 77, 0.96)',
-        borderLeft: '1px solid rgba(184, 255, 225, 0.12)',
-        backdropFilter: 'blur(12px)',
-      }}
-    >
-      <div className="p-4">
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          className="absolute top-3 right-3 p-1 rounded hover:bg-white/5 transition-colors cursor-pointer bg-transparent border-none"
-        >
-          <X className="w-4 h-4 text-text-secondary" />
-        </button>
+    <>
+      <div
+        className="absolute right-0 top-0 bottom-0 z-20 overflow-y-auto"
+        style={{
+          width: 320,
+          background: 'rgba(0, 16, 77, 0.96)',
+          borderLeft: '1px solid rgba(184, 255, 225, 0.12)',
+          backdropFilter: 'blur(12px)',
+        }}
+      >
+        <div className="p-4">
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 p-1 rounded hover:bg-white/5 transition-colors cursor-pointer bg-transparent border-none"
+          >
+            <X className="w-4 h-4 text-text-secondary" />
+          </button>
 
-        {isPipeline ? (
-          <PipelineDetail data={selection.data as PipelineData} />
-        ) : (
-          <FacilityDetail data={selection.data as FacilityData} entityType={selection.type} />
-        )}
+          {isPipeline ? (
+            <PipelineDetail data={selection.data as PipelineData} />
+          ) : (
+            <FacilityDetail
+              data={selection.data as FacilityData & { is_hub?: boolean; npdid?: number }}
+              entityType={selection.type}
+              onShowHubBalance={(npdid, name) => setHubBalance({ npdid, name })}
+            />
+          )}
+        </div>
       </div>
-    </div>
+
+      {hubBalance && (
+        <HubBalancePanel
+          facilityNpdid={hubBalance.npdid}
+          hubName={hubBalance.name}
+          onClose={() => setHubBalance(null)}
+        />
+      )}
+    </>
   );
 }

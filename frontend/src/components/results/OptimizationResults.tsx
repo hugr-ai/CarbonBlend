@@ -1,18 +1,36 @@
 import { useState } from 'react';
+import { FileSpreadsheet } from 'lucide-react';
 import { useScenarios } from '@/hooks/useScenario';
+import { useScenarioStore } from '@/stores/scenarioStore';
 import { RankingTable } from './RankingTable';
 import { CostBreakdown } from './CostBreakdown';
 import { PathwayDiagram } from './PathwayDiagram';
+import { BridgeCard } from './BridgeCard';
 import { MonteCarloChart } from '@/components/uncertainty/MonteCarloChart';
 import { TornadoChart } from '@/components/uncertainty/TornadoChart';
 import { RiskRegister } from '@/components/risk/RiskRegister';
 import { formatCost } from '@/utils/formatters';
+import { downloadReport } from '@/api/client';
 import type { Pathway } from '@/types/scenario';
 
 export function OptimizationResults() {
   const { activeScenario } = useScenarios();
+  const setActiveTab = useScenarioStore((s) => s.setActiveTab);
   const [selectedRank, setSelectedRank] = useState<number | null>(null);
   const [tab, setTab] = useState<'existing' | 'bridges'>('existing');
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    if (!activeScenario) return;
+    setExporting(true);
+    try {
+      await downloadReport(activeScenario.id);
+    } catch (err) {
+      console.error('Export failed:', err);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (!activeScenario?.result) {
     return (
@@ -22,6 +40,12 @@ export function OptimizationResults() {
           <p className="text-text-secondary/60 text-xs mt-1">
             Run an optimization from the Scenarios tab
           </p>
+          <button
+            onClick={() => setActiveTab('scenarios')}
+            className="mt-3 px-4 py-2 bg-teal text-navy rounded-lg text-xs font-medium hover:bg-teal/90 transition-colors"
+          >
+            Go to Scenarios
+          </button>
         </div>
       </div>
     );
@@ -29,24 +53,38 @@ export function OptimizationResults() {
 
   const { existing_pathways, bridge_pathways, bridges } = activeScenario.result;
   const currentPathways = tab === 'existing' ? existing_pathways : bridge_pathways;
-  const selectedPathway = currentPathways.find((p) => p.rank === selectedRank);
+  const selectedPathway = currentPathways.find((p: Pathway) => p.rank === selectedRank);
+
+  const existingBest = existing_pathways[0]?.total_cost_musd_yr ?? 0;
+  const bridgeBest = bridge_pathways[0]?.total_cost_musd_yr ?? 0;
+  const bridgeSavings = existingBest > 0 && bridgeBest > 0 ? existingBest - bridgeBest : 0;
 
   return (
     <div className="w-full h-full overflow-y-auto p-6 space-y-6">
+      {/* Header with tab toggle */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-text-primary">
-            Optimization Results
-          </h2>
-          <p className="text-sm text-text-secondary">
-            {activeScenario.name}
-          </p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-text-primary">
+              Optimization Results
+            </h2>
+            <p className="text-sm text-text-secondary">
+              {activeScenario.name}
+            </p>
+          </div>
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-surface border border-border rounded-lg text-xs font-medium text-text-secondary hover:border-teal/30 hover:text-teal transition-colors disabled:opacity-40"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            {exporting ? 'Exporting...' : 'Export Report'}
+          </button>
         </div>
 
-        {/* Tab toggle */}
         <div className="flex bg-surface border border-border rounded-lg overflow-hidden">
           <button
-            onClick={() => setTab('existing')}
+            onClick={() => { setTab('existing'); setSelectedRank(null); }}
             className={`px-4 py-2 text-xs font-medium transition-colors ${
               tab === 'existing'
                 ? 'bg-teal text-navy'
@@ -56,7 +94,7 @@ export function OptimizationResults() {
             Existing Infrastructure
           </button>
           <button
-            onClick={() => setTab('bridges')}
+            onClick={() => { setTab('bridges'); setSelectedRank(null); }}
             className={`px-4 py-2 text-xs font-medium transition-colors ${
               tab === 'bridges'
                 ? 'bg-teal text-navy'
@@ -89,24 +127,31 @@ export function OptimizationResults() {
           </p>
         </div>
         <div className="bg-surface border border-border rounded-xl p-3">
-          <span className="text-xs text-text-secondary">Bridge Opportunities</span>
-          <p className="text-lg font-semibold text-warning">
-            {bridges.length}
+          <span className="text-xs text-text-secondary">
+            {tab === 'bridges' ? 'Bridge Savings' : 'Bridge Opportunities'}
+          </span>
+          <p className={`text-lg font-semibold ${tab === 'bridges' && bridgeSavings > 0 ? 'text-success' : 'text-warning'}`}>
+            {tab === 'bridges' && bridgeSavings > 0
+              ? formatCost(bridgeSavings) + '/yr'
+              : bridges.length.toString()
+            }
           </p>
         </div>
       </div>
 
       {/* Ranking table */}
-      <div className="bg-surface border border-border rounded-xl p-4">
-        <h3 className="text-sm font-semibold text-text-primary mb-3">
-          Ranked Pathways
-        </h3>
-        <RankingTable
-          pathways={currentPathways}
-          selectedRank={selectedRank}
-          onSelect={setSelectedRank}
-        />
-      </div>
+      {currentPathways.length > 0 && (
+        <div className="bg-surface border border-border rounded-xl p-4">
+          <h3 className="text-sm font-semibold text-text-primary mb-3">
+            Ranked Pathways
+          </h3>
+          <RankingTable
+            pathways={currentPathways}
+            selectedRank={selectedRank}
+            onSelect={setSelectedRank}
+          />
+        </div>
+      )}
 
       {/* Selected pathway diagram */}
       {selectedPathway && <PathwayDiagram pathway={selectedPathway} />}
@@ -116,46 +161,15 @@ export function OptimizationResults() {
         <CostBreakdown pathways={currentPathways} />
       )}
 
-      {/* Bridge opportunities */}
+      {/* Bridge opportunity cards */}
       {tab === 'bridges' && bridges.length > 0 && (
-        <div className="bg-surface border border-border rounded-xl p-4">
+        <div>
           <h3 className="text-sm font-semibold text-text-primary mb-3">
-            Bridge Opportunities
+            Bridge Infrastructure Opportunities
           </h3>
-          <div className="space-y-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {bridges.map((b, i) => (
-              <div
-                key={i}
-                className="bg-navy border border-border rounded-lg p-3 flex items-start justify-between"
-              >
-                <div>
-                  <span className="text-xs font-medium text-text-primary">
-                    {b.type}
-                  </span>
-                  <p className="text-xs text-text-secondary mt-0.5">
-                    {b.description}
-                  </p>
-                </div>
-                <div className="text-right shrink-0 ml-4">
-                  <p className="text-xs text-text-primary">
-                    CAPEX: {formatCost(b.capex_musd)}
-                  </p>
-                  <p className="text-xs text-success">
-                    NPV: {formatCost(b.npv_musd)}
-                  </p>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                      b.risk_rating === 'low'
-                        ? 'bg-success/20 text-success'
-                        : b.risk_rating === 'medium'
-                        ? 'bg-warning/20 text-warning'
-                        : 'bg-danger/20 text-danger'
-                    }`}
-                  >
-                    {b.risk_rating} risk
-                  </span>
-                </div>
-              </div>
+              <BridgeCard key={i} bridge={b} index={i} />
             ))}
           </div>
         </div>

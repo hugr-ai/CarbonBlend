@@ -635,3 +635,98 @@ def get_react_flow_data(
         )
 
     return {"nodes": nodes, "edges": edges}
+
+
+# ---------------------------------------------------------------------------
+# trace_paths_to_terminals -- path enumeration for path-to-market
+# ---------------------------------------------------------------------------
+
+def trace_paths_to_terminals(
+    graph: nx.DiGraph,
+    field_npdid: int,
+    cutoff: int = 10,
+) -> list[dict[str, Any]]:
+    """Find all simple paths from a field to every reachable export terminal.
+
+    For each path, calculates cumulative tariff and tracks CO2 content
+    changes along the route (CO2 decreases at processing plants with removal).
+
+    Args:
+        graph: Infrastructure graph (full or subgraph).
+        field_npdid: NPDID of the source field.
+        cutoff: Maximum path length (default 10).
+
+    Returns:
+        List of path dicts, each containing node_ids, terminal_name,
+        total_tariff_nok_sm3, co2 at entry/exit, path_length, and pipelines.
+    """
+    source_node = f"field_{field_npdid}"
+    if source_node not in graph:
+        return []
+
+    source_data = graph.nodes[source_node]
+    co2_at_entry = source_data.get("co2_mol_pct")
+
+    # Find all terminal nodes
+    terminal_nodes = [
+        n for n, d in graph.nodes(data=True)
+        if d.get("node_type") == "export_terminal"
+    ]
+
+    results: list[dict[str, Any]] = []
+
+    for terminal_node in terminal_nodes:
+        try:
+            all_paths = list(
+                nx.all_simple_paths(graph, source_node, terminal_node, cutoff=cutoff)
+            )
+        except nx.NetworkXError:
+            continue
+
+        terminal_data = graph.nodes[terminal_node]
+
+        for path in all_paths[:5]:  # Limit per terminal
+            total_tariff = 0.0
+            pipelines: list[str] = []
+            node_labels: list[str] = []
+
+            # Track CO2 along the path
+            current_co2 = co2_at_entry
+
+            for i, node_id in enumerate(path):
+                node_data = graph.nodes[node_id]
+                node_labels.append(node_data.get("label", node_id))
+
+                # If node is a processing plant with CO2 removal, reduce CO2
+                if (
+                    node_data.get("node_type") == "processing_plant"
+                    and node_data.get("has_co2_removal")
+                    and current_co2 is not None
+                ):
+                    # Assume removal brings CO2 down to 2.5% or by 50%,
+                    # whichever is higher
+                    current_co2 = min(current_co2, max(2.5, current_co2 * 0.5))
+
+                if i > 0:
+                    prev = path[i - 1]
+                    edge_data = graph.edges.get((prev, node_id), {})
+                    tariff = edge_data.get("tariff_nok_sm3") or 0.0
+                    total_tariff += tariff
+                    label = edge_data.get("label", "")
+                    if label and edge_data.get("edge_type") == "pipeline":
+                        pipelines.append(label)
+
+            results.append({
+                "node_ids": path,
+                "node_labels": node_labels,
+                "terminal_name": terminal_data.get("label", terminal_node),
+                "total_tariff_nok_sm3": round(total_tariff, 6),
+                "co2_at_entry": co2_at_entry,
+                "co2_at_exit": round(current_co2, 2) if current_co2 is not None else None,
+                "path_length": len(path) - 1,
+                "pipelines": pipelines,
+            })
+
+    # Sort by total tariff ascending
+    results.sort(key=lambda p: p["total_tariff_nok_sm3"])
+    return results

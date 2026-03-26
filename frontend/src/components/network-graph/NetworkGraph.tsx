@@ -21,6 +21,7 @@ import { ProcessingNode } from './ProcessingNode';
 import { TerminalNode } from './TerminalNode';
 import { PipelineEdge } from './PipelineEdge';
 import { NetworkLegend } from './NetworkLegend';
+import { PathsToMarket } from './PathsToMarket';
 import { InfraDetailPanel, type InfraSelection } from '@/components/layout/InfraDetailPanel';
 import { Loader2 } from 'lucide-react';
 
@@ -41,11 +42,26 @@ function NetworkGraphInner() {
   const selectedFieldNpdid = useScenarioStore((s) => s.selectedFieldNpdid);
   const { data: network, isLoading, error } = useNetwork(selectedFieldNpdid);
   const [infraSelection, setInfraSelection] = useState<InfraSelection | null>(null);
+  const [highlightedPath, setHighlightedPath] = useState<string[] | null>(null);
   const { fitView } = useReactFlow();
   const prevFieldRef = useRef<number | null | undefined>(undefined);
 
+  // Clear highlighted path when field selection changes
+  useEffect(() => {
+    setHighlightedPath(null);
+  }, [selectedFieldNpdid]);
+
   const { initialNodes, initialEdges } = useMemo(() => {
     if (!network) return { initialNodes: [], initialEdges: [] };
+
+    // Build set of highlighted node/edge pairs for path highlighting
+    const highlightedNodeSet = new Set(highlightedPath ?? []);
+    const highlightedEdgeSet = new Set<string>();
+    if (highlightedPath) {
+      for (let i = 0; i < highlightedPath.length - 1; i++) {
+        highlightedEdgeSet.add(`${highlightedPath[i]}->${highlightedPath[i + 1]}`);
+      }
+    }
 
     const nodes: Node[] = network.nodes.map((n, i) => ({
       id: n.id,
@@ -58,26 +74,44 @@ function NetworkGraphInner() {
         co2: n.data?.co2_mol_pct ?? n.data?.co2,
         selected: n.data?.npdid === selectedFieldNpdid,
       },
+      style: highlightedPath
+        ? {
+            opacity: highlightedNodeSet.has(n.id) ? 1 : 0.25,
+          }
+        : undefined,
     }));
 
-    const edges: Edge[] = network.edges.map((e) => ({
-      id: e.id,
-      source: e.source,
-      target: e.target,
-      type: 'pipeline',
-      data: {
-        ...e.data,
-        // Map backend field names to frontend component expectations
-        name: e.label || e.data?.label,
-        diameter: e.data?.diameter_inches ?? e.data?.diameter,
-        co2Limit: e.data?.co2_limit ?? e.data?.co2Limit,
-        tariff: e.data?.tariff_nok_sm3 ?? e.data?.tariff,
-        medium: e.data?.medium,
-      },
-    }));
+    const edges: Edge[] = network.edges.map((e) => {
+      const edgeKey = e.id; // format: "source->target"
+      const isOnPath = highlightedPath ? highlightedEdgeSet.has(edgeKey) : false;
+
+      return {
+        id: e.id,
+        source: e.source,
+        target: e.target,
+        type: 'pipeline',
+        data: {
+          ...e.data,
+          // Map backend field names to frontend component expectations
+          name: e.label || e.data?.label,
+          diameter: e.data?.diameter_inches ?? e.data?.diameter,
+          co2Limit: e.data?.co2_limit ?? e.data?.co2Limit,
+          tariff: e.data?.tariff_nok_sm3 ?? e.data?.tariff,
+          medium: e.data?.medium,
+          highlighted: isOnPath,
+        },
+        style: highlightedPath
+          ? {
+              opacity: isOnPath ? 1 : 0.15,
+              strokeWidth: isOnPath ? 3 : 1,
+              stroke: isOnPath ? '#00d4aa' : undefined,
+            }
+          : undefined,
+      };
+    });
 
     return { initialNodes: nodes, initialEdges: edges };
-  }, [network, selectedFieldNpdid]);
+  }, [network, selectedFieldNpdid, highlightedPath]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -217,7 +251,16 @@ function NetworkGraphInner() {
       </ReactFlow>
 
       {/* Legend overlay */}
-      {!infraSelection && <NetworkLegend />}
+      {!infraSelection && !selectedFieldNpdid && <NetworkLegend />}
+
+      {/* Paths to Market panel (shown when a field is selected) */}
+      {selectedFieldNpdid && (
+        <PathsToMarket
+          fieldNpdid={selectedFieldNpdid}
+          onHighlightPath={setHighlightedPath}
+          highlightedPath={highlightedPath}
+        />
+      )}
 
       <InfraDetailPanel
         selection={infraSelection}

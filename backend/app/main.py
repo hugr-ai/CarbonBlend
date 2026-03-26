@@ -24,6 +24,7 @@ from app.routers import (
     optimization,
     uncertainty_router,
     decision,
+    export,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -78,6 +79,7 @@ app.include_router(scenarios.router)
 app.include_router(optimization.router)
 app.include_router(uncertainty_router.router)
 app.include_router(decision.router)
+app.include_router(export.router)
 
 # Serve static GeoJSON files
 geojson_path = Path(settings.geojson_dir)

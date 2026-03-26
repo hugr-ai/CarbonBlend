@@ -10,6 +10,42 @@ interface OptimizationState {
   jobId: string | null;
 }
 
+/**
+ * Map the backend optimization response (which has pathways with route_nodes,
+ * route_edges, total_annual_cost_mnok, etc.) to the frontend OptimizationResult shape.
+ */
+function mapBackendResult(raw: Record<string, unknown>): OptimizationResult {
+  const pathways = (raw.pathways as Array<Record<string, unknown>>) ?? [];
+
+  const existingPathways = pathways.map((p, idx) => ({
+    rank: idx + 1,
+    name: `${(p.terminal as string) ?? 'Unknown'} via ${((p.route_nodes as Array<Record<string, unknown>>) ?? []).map((n) => n.label).join(' > ')}`,
+    total_cost_musd_yr: ((p.total_annual_cost_mnok as number) ?? 0) / 10.5, // rough MNOK->MUSD
+    co2_removed_mtpa: 0,
+    co2_stored_mtpa: 0,
+    steps: ((p.route_nodes as Array<Record<string, unknown>>) ?? []).map((n) => ({
+      type: 'transport' as const,
+      location: (n.label as string) ?? '',
+      description: (n.type as string) ?? '',
+      co2_in: (raw.co2_mol_pct as number) ?? 0,
+      co2_out: (raw.co2_target_mol_pct as number) ?? 2.5,
+      cost_musd_yr: 0,
+    })),
+    terminal: (p.terminal as string) ?? '',
+    tariff_breakdown: {
+      segments: [],
+      total_nok_sm3: (p.total_tariff_nok_sm3 as number) ?? 0,
+      total_musd_yr: ((p.annual_tariff_mnok as number) ?? 0) / 10.5,
+    },
+  }));
+
+  return {
+    existing_pathways: existingPathways,
+    bridge_pathways: [],
+    bridges: [],
+  };
+}
+
 export function useOptimization() {
   const [state, setState] = useState<OptimizationState>({
     status: 'idle',
@@ -43,12 +79,33 @@ export function useOptimization() {
       setState({ status: 'pending', result: null, error: null, jobId: null });
 
       try {
-        const { job_id } = await runOptimization(config);
-        setState((s) => ({ ...s, status: 'running', jobId: job_id }));
+        // The backend runs synchronously and returns the full result
+        // alongside the job_id in a single response.
+        const response = await runOptimization(config);
+        const raw = response as unknown as Record<string, unknown>;
+        const jobId = (raw.job_id as string) ?? null;
+
+        // Check if the result was returned inline (sync mode)
+        if (raw.status === 'ok' && raw.pathways) {
+          const mapped = mapBackendResult(raw);
+          setState({
+            status: 'complete',
+            result: mapped,
+            error: null,
+            jobId: jobId,
+          });
+          if (activeScenarioId) {
+            updateScenario(activeScenarioId, { result: mapped });
+          }
+          return;
+        }
+
+        // Otherwise fall back to polling
+        setState((s) => ({ ...s, status: 'running', jobId: jobId }));
 
         pollRef.current = setInterval(async () => {
           try {
-            const poll = await getOptimizationResult(job_id);
+            const poll = await getOptimizationResult(jobId!);
 
             if (poll.status === 'complete' && poll.result) {
               stopPolling();
@@ -56,7 +113,7 @@ export function useOptimization() {
                 status: 'complete',
                 result: poll.result,
                 error: null,
-                jobId: job_id,
+                jobId: jobId,
               });
 
               if (activeScenarioId) {
@@ -68,7 +125,7 @@ export function useOptimization() {
                 status: 'failed',
                 result: null,
                 error: poll.error ?? 'Optimization failed',
-                jobId: job_id,
+                jobId: jobId,
               });
             }
           } catch {
